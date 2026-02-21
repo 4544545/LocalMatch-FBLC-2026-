@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Main</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='main_style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body, html {margin:0; height:100%; font-family:Arial;}
+  .layout {display:flex; height:100vh;}
+  .sidenav {width:350px; background:#ddd; overflow:auto; padding:10px;}
+  #map {flex:1;}
+  input, select, button {margin:5px 0; padding:5px;}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidenav" id="sidebar">
+    <div class="search-wrapper">
+      <span class="material-symbols-outlined">search</span>
+      <input type="text" id="search" placeholder="Search business...">
+      <button id="search-btn">Search</button>
+      <button id="view-favorites">View Favorites</button>
+    </div>
+
+    <div>
+      <h3>Filters</h3>
+      <select id="service-filter">
+        <option value="">All Services</option>
+      </select>
+      <select id="sort-filter">
+        <option value="">Sort By</option>
+        <option value="rating">Rating</option>
+        <option value="reviews">Reviews</option>
+        <option value="deals">Has Deals</option>
+      </select>
+    </div>
+
+    <div id="business-container"></div>
+    <div id="favorites-container" style="display:none;">
+      <h3>Favorites</h3>
+      <ul id="favorites-list"><li>No favorites yet</li></ul>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+// Initialize map
+let map = L.map("map").setView([43.7213166, -79.5331605], 10);
+L.tileLayer("https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=lv6byY6PozFFtgXpBCrC").addTo(map);
+
+const dataList = {{ data_list | tojson }};
+let favorites = [];
+
+// --- Load all reviews on page load ---
+async function loadAllReviews() {
+    for (const b of dataList) {
+        const res = await fetch(`/reviews/${b.ID}`);
+        const reviews = await res.json();
+        b.reviews = reviews.slice(0,3); // only top 3
+    }
+}
+
+// --- Render sidebar ---
+function renderSidebar(b) {
+    document.getElementById("favorites-container").style.display = "none";
+    document.getElementById("business-container").style.display = "block";
+
+    const container = document.getElementById("business-container");
+    container.innerHTML = `
+      <h2>${b.Name}</h2>
+      <p><strong>Service:</strong> ${b.Type}</p>
+      <p><strong>Rating:</strong> ${b.Rating}</p>
+      <p><strong>Reviews:</strong> ${b.ReviewCount}</p>
+      <p><strong>Deals:</strong> ${b.ActiveDeals || "None"}</p>
+      <p><strong>Location:</strong> ${b.Location}</p>
+      <button id="fav-btn">${favorites.some(f=>f.ID===b.ID) ? "❤️ Remove Favorite" : "❤️ Add Favorite"}</button>
+
+      <h3>Reviews</h3>
+      <ul id="reviews-list">
+        ${b.reviews.length===0 ? "<li>No reviews yet</li>" : b.reviews.map(rv=>`<li><strong>⭐${rv.Rating}</strong>: ${rv.ReviewText}</li>`).join("")}
+      </ul>
+
+      <h4>Leave a Review</h4>
+      <input type="number" id="new-rating" placeholder="Rating 1-5" min="1" max="5">
+      <textarea id="new-review" placeholder="Write review"></textarea>
+      <button id="submit-review">Submit</button>
+    `;
+
+    // Favorite toggle
+    document.getElementById("fav-btn").onclick = () => {
+        if(favorites.some(f=>f.ID===b.ID)) favorites = favorites.filter(f=>f.ID!==b.ID);
+        else favorites.push(b);
+        updateFavoritesUI();
+        renderSidebar(b);
+    };
+
+    // Submit review
+    document.getElementById("submit-review").onclick = async () => {
+        const rating = parseFloat(document.getElementById("new-rating").value);
+        const text = document.getElementById("new-review").value.trim();
+        if(!text || !rating || rating<1||rating>5) return alert("Invalid review");
+        await fetch("/reviews/add", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({business_id:b.ID, review_text:text, rating})
+        });
+        await loadAllReviews(); // reload reviews
+        renderSidebar(b);
+    };
+}
+
+// --- Update favorites list ---
+function updateFavoritesUI() {
+    const list = document.getElementById("favorites-list");
+    list.innerHTML="";
+    if(favorites.length===0) list.innerHTML="<li>No favorites yet</li>";
+    favorites.forEach(f=>{
+        const li = document.createElement("li");
+        li.textContent=f.Name;
+        li.onclick = ()=> renderSidebar(f);
+        list.appendChild(li);
+    });
+}
+
+// --- Show favorites tab ---
+document.getElementById("view-favorites").onclick = () => {
+    document.getElementById("business-container").style.display = "none";
+    document.getElementById("favorites-container").style.display = "block";
+    updateFavoritesUI();
+};
+
+// --- Create markers with popups ---
+dataList.forEach(b => {
+    if(!b.Latitude||!b.Longitude) return;
+    const marker = L.marker([b.Latitude,b.Longitude]).addTo(map);
+    marker.bindPopup(`
+        <strong>${b.Name}</strong><br>
+        Service: ${b.Type}<br>
+        ⭐ Rating: ${b.Rating}<br>
+        ${b.ActiveDeals ? "💰 Deal: "+b.ActiveDeals : ""}
+    `);
+    marker.on("click", ()=> renderSidebar(b));
+    b.marker = marker;
+});
+
+// --- Search ---
+document.getElementById("search-btn").onclick=()=>{
+    const q=document.getElementById("search").value.toLowerCase();
+    const b=dataList.find(x=>x.Name.toLowerCase().includes(q));
+    if(b) renderSidebar(b); // do NOT zoom
+    else alert("Business not found");
+};
+
+// --- Populate filters ---
+const serviceSet = [...new Set(dataList.map(b=>b.Type))];
+serviceSet.forEach(s=>{
+    const opt = document.createElement("option"); opt.value=s; opt.textContent=s;
+    document.getElementById("service-filter").appendChild(opt);
+});
+
+document.getElementById("service-filter").onchange = applyFilterSort;
+document.getElementById("sort-filter").onchange = applyFilterSort;
+
+function applyFilterSort(){
+    const typeFilter=document.getElementById("service-filter").value;
+    const sortFilter=document.getElementById("sort-filter").value;
+    let filtered=dataList.filter(b=>!typeFilter||b.Type===typeFilter);
+
+    if(sortFilter==="rating") filtered.sort((a,b)=>b.Rating - a.Rating);
+    if(sortFilter==="reviews") filtered.sort((a,b)=>b.ReviewCount - a.ReviewCount);
+    if(sortFilter==="deals") filtered=filtered.filter(b=>b.ActiveDeals && b.ActiveDeals.trim()!=="");
+
+    dataList.forEach(b=>b.marker.remove());
+    filtered.forEach(b=>b.marker.addTo(map));
+}
+
+// --- Initialize ---
+(async function init(){
+    await loadAllReviews();
+    updateFavoritesUI();
+})();
+</script>
+
+</body>
+</html>

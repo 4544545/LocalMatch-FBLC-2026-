@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Flask App</title>
+</head>
+<body>
+    <h1 id="headBtn">Welcome to Local Match!</h1>
+
+    <!-- Original button -->
+    <button id="login-btn" style="font-size:25px;border-radius:25px;">
+        Login with Google
+    </button>
+
+    <!-- Hidden button -->
+    <button id="redirect-btn" style="font-size:25px;border-radius:25px; display:none;">
+        Start your journey
+    </button>
+
+    <script>
+    const loginBtn = document.getElementById('login-btn');
+    const redirectBtn = document.getElementById('redirect-btn');
+    const headBtn = document.getElementById('headBtn');  
+
+    loginBtn.addEventListener('click', () => {
+        // Remove the original button
+        loginBtn.style.display = 'none';
+
+        // Remove the heading
+        headBtn.style.display = 'none';
+
+        // Show the second button
+        redirectBtn.style.display = 'inline-block';
+    });
+
+    redirectBtn.addEventListener('click', () => {
+        // Redirect to main page
+        window.location.href = "{{ url_for('main') }}";
+    });
+    </script>
+
+
+
+
+    <footer>
+        <p>&copy; 2026~Guneet</p>
+    </footer>
+</body>
+</html>
