@@ -32,7 +32,7 @@ This project integrates a Python Flask backend, SQL database, and a dynamic HTML
 
 
 
-## ⚙️ How It Works
+## How It Works
 
 1. Flask connects to the SQL database.
 2. Businesses and reviews are fetched using API routes.
@@ -48,7 +48,7 @@ This project integrates a Python Flask backend, SQL database, and a dynamic HTML
 
 
 
-## 📌 Future Improvements
+## Future Improvements
 
 - User authentication system
 - Star rating visualization
@@ -58,7 +58,7 @@ This project integrates a Python Flask backend, SQL database, and a dynamic HTML
 
 ---
 
-## ▶️ Installation
+## ▶Installation
 
 1. Clone the repository:
 
