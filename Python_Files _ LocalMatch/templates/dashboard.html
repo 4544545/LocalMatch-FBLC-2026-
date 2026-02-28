@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Command Center</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+
+<div class="header">
+    <h1>💼 Insights</h1>
+    <button type="button" class="btn-return" onclick="window.location.href='/main'">
+        Return to Map
+    </button>
+</div>
+
+<div class="dashboard-container">
+    <div class="business-selector">
+        <h3>Select Business</h3>
+        {% for stat in stats %}
+        <div class="mini-card" onclick="showAnalytics('{{ stat.Name }}', '{{ stat.Rating }}', '{{ stat.ReviewCount }}')">
+            <strong>{{ stat.Name }}</strong>
+            <p>⭐ {{ stat.Rating }} | {{ stat.ReviewCount }} reviews</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="analytics-view" id="analytics-pane">
+        <div id="placeholder-text">
+            <h2>Select a business to view growth analytics and complaints</h2>
+        </div>
+
+        <div id="data-content" style="display: none;">
+            <h2 id="selected-name">Business Name</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="label">Monthly Revenue Growth</span>
+                    <h3 id="growth-val" class="positive">+12.4%</h3>
+                    <p class="subtext">Compared to last month</p>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Customer Trust Score</span>
+                    <h3 id="trust-val">80/100</h3>
+                    <p class="subtext">Based on verified reviews</p>
+                </div>
+            </div>
+
+            <div class="feedback-section">
+                <h3>Specific Improvements Needed</h3>
+                <div id="complaints-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * Switches the view from the 'placeholder' to 'data-content' and 
+ *  generates data based on the business rating.
+ */
+function showAnalytics(name, rating, reviews) {
+    document.getElementById('placeholder-text').style.display = 'none';
+    document.getElementById('data-content').style.display = 'block';
+    document.getElementById('selected-name').innerText = name;
+    
+    // Logic: Categorizes business performance based on its average rating
+    const isGrowth = parseFloat(rating) > 4.2;
+    const growthElem = document.getElementById('growth-val');
+    
+    //  
+    // If rating > 4.2, show positive growth and suggestions.
+    // If rating < 4.2, show negative growth and urgent complaints.
+    if(isGrowth) {
+        growthElem.innerText = "+" + (Math.random() * 15).toFixed(1) + "%";
+        growthElem.className = "positive";
+        document.getElementById('complaints-list').innerHTML = `
+            <div class="complaint-item improvement">💡 Suggestion: Users want more weekend hours.</div>
+            <div class="complaint-item improvement">💡 Suggestion: Consider a loyalty program.</div>
+            <div class="complaint-item improvement">💡 Suggestion: Consider adding more seating.</div>
+        `;
+    } else {
+        growthElem.innerText = "-" + (Math.random() * 5).toFixed(1) + "%";
+        growthElem.className = "negative";
+        document.getElementById('complaints-list').innerHTML = `
+            <div class="complaint-item urgent">⚠️ Complaint: Multiple mentions of slow service.</div>
+            <div class="complaint-item urgent">⚠️ Complaint: Price point is higher than competitors.</div>
+            <div class="complaint-item urgent">⚠️ Complaint: Reduce wait times for service.</div>
+        `;
+    }
+}
+</script>
+
+</body>
+</html>

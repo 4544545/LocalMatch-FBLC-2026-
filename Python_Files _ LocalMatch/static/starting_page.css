@@ -1,0 +1,31 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #0a0a0b;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+.gateway-card {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 3rem;
+    border-radius: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    width: 360px;
+    color: white;
+}
+.captcha-container {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px dashed #333;
+}
+#login-section {
+    animation: reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes reveal {
+    from { opacity: 0; filter: blur(5px); transform: translateY(15px); }
+    to { opacity: 1; filter: blur(0); transform: translateY(0); }
+}

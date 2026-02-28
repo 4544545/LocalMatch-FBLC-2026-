@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalMatch Main</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='main_style.css') }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+
+<body>
+<div id="toast-container"></div>
+
+<div class="layout">
+  <div class="sidenav" id="sidebar">
+    
+    <div class="nav-buttons">
+      <button id="btn-explore">🌎Explore</button>
+      <button id="btn-favorites">⭐ Favorites</button>
+      <button onclick="window.location.href='/dashboard'">💼 Business View</button>
+    </div>
+
+    <div id="explore-section">
+      <input type="text" id="search" placeholder="🔍 Search businesses">
+      <div style="display: flex; gap: 10px;">
+        <select id="service-filter"><option value="">All Services</option></select>
+        <select id="sort-filter">
+          <option value="">Sort By...</option>
+          <option value="rating">Highest Rated</option>
+          <option value="deals">Has Deals First</option>
+        </select>
+      </div>
+      <div id="directory-list"></div>
+    </div>
+
+    <div id="favorites-section" style="display:none;">
+      <h2>Your Favorites</h2>
+      <div id="favorites-list"></div>
+    </div>
+
+    <div id="business-detail" style="display:none;">
+      <button id="back-btn" style="background:#6c757d;">← Back to Directory</button>
+      <div id="detail-content"></div>
+    </div>
+
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+// ── Map initialization: Sets the starting coordinates
+let map = L.map("map").setView([43.7213166, -79.5331605], 10);
+L.tileLayer("https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=lv6byY6PozFFtgXpBCrC").addTo(map);
+
+// Data Injection: Flask converts Python list to a JSON object for JS to use
+const dataList = {{ data_list | tojson }};
+let favorites = [];
+
+// Tab Logic: Switches display property between 'none' and 'block' for page navigation
+document.getElementById("btn-explore").onclick = () => {
+    document.getElementById("explore-section").style.display = "block";
+    document.getElementById("favorites-section").style.display = "none";
+    document.getElementById("business-detail").style.display = "none";
+};
+
+document.getElementById("btn-favorites").onclick = () => {
+    document.getElementById("explore-section").style.display = "none";
+    document.getElementById("favorites-section").style.display = "block";
+    document.getElementById("business-detail").style.display = "none";
+    renderFavorites();
+};
+
+document.getElementById("back-btn").onclick = () => {
+    document.getElementById("btn-explore").click();
+};
+
+// Marker: Creates map markers only once to save memory and prevent event listener overlap
+dataList.forEach(b => {
+    if (!b.Latitude || !b.Longitude) return;
+
+    const marker = L.marker([b.Latitude, b.Longitude]).addTo(map);
+
+    //  UI: Only adds the Deal line to the popup if a deal actually exists
+    const dealLine = (b.ActiveDeals && b.ActiveDeals !== "No deals at the moment")
+        ? `<br>🏷️ <strong>Deal:</strong> ${b.ActiveDeals}` : "";
+
+    marker.bindPopup(`
+        <strong>${b.Name}</strong><br>
+        📋 <strong>Type:</strong> ${b.Type}<br>
+        ⭐ <strong>Rating:</strong> ${b.Rating} (${b.ReviewCount} reviews)<br>
+        📍 <strong>Location:</strong> ${b.Location}
+        ${dealLine}
+    `);
+
+    // Event Link: Clicking a map marker triggers the sidebar Detail View
+    marker.on("click", () => {
+        marker.openPopup();
+        renderBusinessDetail(b);
+    });
+
+    b.marker = marker; 
+});
+
+// Marker Sync: Uses a 'Set' for O(1) lookup speed to show/hide markers based on search results
+function syncMarkers(visibleList) {
+    const visibleIds = new Set(visibleList.map(b => b.ID));
+    dataList.forEach(b => {
+        if (!b.marker) return;
+        if (visibleIds.has(b.ID)) {
+            b.marker.addTo(map);
+        } else {
+            b.marker.remove();
+        }
+    });
+}
+
+// Sidebar:   HTML cards for the current list of businesses
+function renderDirectory(list) {
+    const container = document.getElementById("directory-list");
+    container.innerHTML = "";
+    list.forEach(b => {
+        const card = document.createElement("div");
+        card.className = "business-card";
+        const dealHtml = (b.ActiveDeals && b.ActiveDeals !== "No deals at the moment")
+            ? `<div class="deal-badge">🏷️ ${b.ActiveDeals}</div>` : "";
+        card.innerHTML = `
+            <h3>${b.Name}</h3>
+            ${dealHtml}
+            <p>⭐ ${b.Rating} (${b.ReviewCount} reviews) • ${b.Type}</p>
+        `;
+        card.onclick = () => renderBusinessDetail(b);
+        container.appendChild(card);
+    });
+}
+
+// Search/Filter : Handles text matching, category filtering, and custom sorting logic all in one
+function applyFilters() {
+    const query      = document.getElementById("search").value.toLowerCase();
+    const typeFilter = document.getElementById("service-filter").value;
+    const sortFilter = document.getElementById("sort-filter").value;
+
+    // Filter: Checks name, type, and location against the search 
+    let result = dataList.filter(b =>
+        b.Name.toLowerCase().includes(query) ||
+        b.Type.toLowerCase().includes(query) ||
+        (b.Location && b.Location.toLowerCase().includes(query))
+    );
+
+    if (typeFilter) {
+        result = result.filter(b => b.Type === typeFilter);
+    }
+
+    // Sort logic: Sorting (Rating numeric or Deal presence)
+    if (sortFilter === "rating") {
+        result.sort((a, b) => b.Rating - a.Rating);
+    } else if (sortFilter === "deals") {
+        result.sort((a, b) => {
+            const aHas = (a.ActiveDeals && a.ActiveDeals !== "No deals at the moment") ? 0 : 1;
+            const bHas = (b.ActiveDeals && b.ActiveDeals !== "No deals at the moment") ? 0 : 1;
+            return aHas - bHas;
+        });
+    }
+
+    renderDirectory(result);
+    syncMarkers(result);
+}
+
+// Input Listeners: Triggers the filter engine on every keystroke change
+document.getElementById("search").addEventListener("input", applyFilters);
+document.getElementById("service-filter").addEventListener("change", applyFilters);
+document.getElementById("sort-filter").addEventListener("change", applyFilters);
+
+// Detail: Asynchronously fetches business  reviews and builds the  UI
+async function renderBusinessDetail(b) {
+    document.getElementById("explore-section").style.display = "none";
+    document.getElementById("favorites-section").style.display = "none";
+    document.getElementById("business-detail").style.display = "block";
+
+    const isFav = favorites.some(f => f.ID === b.ID);
+
+    // Fetch API: Calls the Flask backend route to get fresh reviews from the DB
+    const res = await fetch(`/reviews/${b.ID}`);
+    const reviews = await res.json();
+
+    const dealHtml = (b.ActiveDeals && b.ActiveDeals !== "No deals at the moment")
+        ? `<div class="deal-badge">Active Deal: ${b.ActiveDeals}</div>` : "";
+
+    const container = document.getElementById("detail-content");
+
+    // Templates: Uses Template Literals to inject data directly into the HTML structure
+    container.innerHTML = `
+      <h2>${b.Name}</h2>
+      <p><strong>Service:</strong> ${b.Type}</p>
+      <p><strong>Rating:</strong> ⭐ ${b.Rating} (${b.ReviewCount} Reviews)</p>
+      ${dealHtml}
+      <p><strong>Location:</strong> ${b.Location}</p>
+
+      <button id="fav-btn" style="background:${isFav ? '#dc3545' : '#ffc107'}; color:black;">
+        ${isFav ? "❌ Remove from Favorites" : "⭐ Add to Favorites"}
+      </button>
+
+      <h3>Latest Reviews</h3>
+      <ul>
+        ${reviews.length === 0
+            ? "<li>No reviews yet</li>"
+            : reviews.map(rv => `<li><strong>⭐${rv.Rating}</strong>: ${rv.ReviewText}</li>`).join("")}
+      </ul>
+
+      <div style="background: white; padding: 15px; border-radius: 8px; margin-top:20px;">
+        <h4>Write a Review</h4>
+        <select id="new-rating">
+          <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
+          <option value="4">⭐⭐⭐⭐ (4/5)</option>
+          <option value="3">⭐⭐⭐ (3/5)</option>
+          <option value="2">⭐⭐ (2/5)</option>
+          <option value="1">⭐ (1/5)</option>
+        </select>
+        <textarea id="new-review" placeholder="Share your experience..." rows="3"></textarea>
+        <button id="submit-review">Submit Review</button>
+      </div>
+    `;
+
+    // Communicates with backend to toggle favorite status in the database
+    document.getElementById("fav-btn").onclick = async () => {
+        const route = favorites.some(f => f.ID === b.ID) ? "/favorites/remove" : "/favorites/add";
+        await fetch(route, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({business_id: b.ID})
+        });
+        
+        // Update JS variable immediately so UI feels fast
+        if(route === "/favorites/add") favorites.push(b);
+        else favorites = favorites.filter(f => f.ID !== b.ID);
+        
+        renderBusinessDetail(b);
+    };
+
+    // Validates review and sends new data to the server
+    document.getElementById("submit-review").onclick = async () => {
+        const ratingVal = document.getElementById("new-rating").value;
+        const text = document.getElementById("new-review").value.trim();
+        if (!text) return alert("Please write a review.");
+
+        const response = await fetch("/reviews/add", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                business_id: b.ID, 
+                review_text: text, 
+                rating: parseFloat(ratingVal) 
+            })
+        });
+
+        if (response.ok) {
+            showNotification("Review posted! Thanks for sharing.");
+            b.ReviewCount++; 
+            renderBusinessDetail(b); 
+        }
+    };
+}
+
+// Displays only the items stored in the 'favorites' local state
+function renderFavorites() {
+    const container = document.getElementById("favorites-list");
+    container.innerHTML = "";
+    if (favorites.length === 0) {
+        container.innerHTML = "<p>No favorites yet. Go explore!</p>";
+        return;
+    }
+    favorites.forEach(f => {
+        const div = document.createElement("div");
+        div.className = "business-card";
+        div.innerHTML = `<h3>${f.Name}</h3><p>⭐ ${f.Rating} • ${f.Type}</p>`;
+        div.onclick = () => renderBusinessDetail(f);
+        container.appendChild(div);
+    });
+}
+
+// Creates a temporary notification with a CSS fade-out effect
+function showNotification(message) {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.innerHTML = `<span class="material-symbols-outlined">check_circle</span> ${message}`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add("fade-out");
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
+}
+
+// Runs automatically to set up the app on page load
+(async function init() {
+    // Creates filter options based on the unique 'Types' found in the data
+    const serviceSet = [...new Set(dataList.map(b => b.Type))];
+    serviceSet.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s; opt.textContent = s;
+        document.getElementById("service-filter").appendChild(opt);
+    });
+
+    // Pulls previously saved favorites so they persist across sessions
+    const favRes = await fetch("/favorites");
+    favorites = await favRes.json();
+
+    renderDirectory(dataList);
+})();
+</script>
+</body>
+</html>

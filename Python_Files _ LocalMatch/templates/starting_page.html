@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Match | Security Check</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='starting_page.css') }}">
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+</head>
+<body>
+
+    <div class="gateway-card">
+        <h1 id="status-title">Security Check</h1>
+        <p id="status-desc">Please verify you are human.</p>
+
+        <div id="captcha-section">
+            <div class="g-recaptcha" 
+                 data-sitekey="6Ld0iXQsAAAAAHeJ-FHHZWkArFB8QEZgcJJ0Pn2j" 
+                 data-callback="verifyCallback"></div>
+            <p id="captcha-error" style="color:red; display:none; margin-top: 10px;">Please complete the CAPTCHA.</p>
+        </div>
+
+        <div id="login-section" style="display:none;">
+            <p style="color: #28a745; font-weight: bold;">Verification Successful!</p>
+            <button id="login-btn" style="background: #4285F4; margin-top: 10px; display: flex; align-items: center; justify-content: center;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="G" style="width:18px; margin-right:10px;">
+                Sign in to Continue
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * This is a "callback function." When the Google API finishes the check, 
+         * it sends a 'response' token here.
+         */
+        function verifyCallback(response) {
+            if (response) {
+                // Hide the captcha and show the login button
+                document.getElementById('captcha-section').style.display = 'none';
+                document.getElementById('login-section').style.display = 'block';
+                
+                // Provide visual confirmation to the user
+                document.getElementById('status-title').textContent = "Verified";
+                document.getElementById('status-desc').textContent = "Access Granted.";
+            }
+        }
+
+        // Once verified, clicking this button takes the user to the main app
+        document.getElementById('login-btn').onclick = () => {
+            window.location.href = "{{ url_for('main') }}";
+        };
+    </script>
+</body>
+</html>
