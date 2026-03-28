@@ -1,17 +1,20 @@
 from flask import Flask, render_template, redirect, session, url_for, request, jsonify
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
 import os
 import sqlite3
 import requests
 
+load_dotenv()
+
 app = Flask(__name__)
 
 # Essential for encrypting the user's session data
-app.secret_key = "b7f8c9a2e41d6b0a9c7f1e5b3d8a2c6e"  
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
 # Allows OAuth to work over HTTP during local development
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 # What information we want to request from the user's Google account
 SCOPES = [
@@ -23,7 +26,7 @@ SCOPES = [
 # Path to your Google Cloud Console credentials file
 CREDENTIALS_PATH = os.path.join(
     os.path.dirname(__file__),
-    "client_secret_2_851189569494-ebcd8bplvt0fjng5qu83h4ugsv6nbbl7.apps.googleusercontent.com.json"
+    os.getenv("CREDENTIALS_PATH")
 )
 
 # AUTHENTICATION ROUTES
@@ -76,7 +79,7 @@ def callback():
 def main():
     # Fetches all business locations from SQLite to display markers on the map.
     connection = sqlite3.connect("localMatch.db")
-    connection.row_factory = sqlite3.Row  # Enables access by column name
+    connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
     cursor.execute("SELECT ID, Name, Type, ActiveDeals, Rating, ReviewCount, Location, Latitude, Longitude FROM Business")
@@ -112,14 +115,14 @@ def add_review():
 
     connection = sqlite3.connect("localMatch.db")
     cursor = connection.cursor()
-    
+
     # 1. Insert the new review
     cursor.execute("INSERT INTO Reviews (BusinessID, ReviewText, Rating) VALUES (?, ?, ?)", (business_id, text, rating))
 
     # 2. Re-calculate the average rating and review count for this business
     cursor.execute("SELECT COUNT(*), AVG(Rating) FROM Reviews WHERE BusinessID = ?", (business_id,))
     count, avg_rating = cursor.fetchone()
-    
+
     # 3. Save the new averages back into the Business table
     cursor.execute("UPDATE Business SET ReviewCount = ?, Rating = ? WHERE ID = ?", (count, avg_rating, business_id))
 
@@ -128,15 +131,15 @@ def add_review():
     connection.close()
     return jsonify({"status": "success"})
 
+
 # FAVORITES & DASHBOARD
 @app.route("/favorites/add", methods=["POST"])
 def add_favorite():
-
     # Adds a business ID to the user's favorites list if not already present.
     business_id = request.json.get("business_id")
     connection = sqlite3.connect("localMatch.db")
     cursor = connection.cursor()
-    
+
     cursor.execute("SELECT * FROM Favorites WHERE BusinessID = ?", (business_id,))
     if not cursor.fetchone():
         cursor.execute("INSERT INTO Favorites (BusinessID) VALUES (?)", (business_id,))
@@ -169,29 +172,31 @@ def dashboard():
     connection = sqlite3.connect("localMatch.db")
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
-    
+
     cursor.execute("SELECT Name, Rating, ReviewCount, ActiveDeals FROM Business ORDER BY Rating DESC")
     business_stats = [dict(row) for row in cursor.fetchall()]
-    
+
     cursor.close()
     connection.close()
     return render_template("dashboard.html", stats=business_stats)
 
+
 # SECURITY & UTILITIES
 @app.route('/verify-captcha', methods=['POST'])
 def verify_captcha():
-    # Server-side validation for Google reCAPTCHA 
-    RECAPTCHA_SECRET_KEY = "6Ld0iXQsAAAAANJfiMCQ4XpIFvVp0EGGRc0EpBc1"
+    # Server-side validation for Google reCAPTCHA
+    recaptcha_secret_key = os.getenv("RECAPTCHA_SECRET_KEY")
     token = request.get_json().get('token')
 
     # Send the token to Google's servers for verification
     response = requests.post(
         'https://www.google.com/recaptcha/api/siteverify',
-        data={'secret': RECAPTCHA_SECRET_KEY, 'response': token}
+        data={'secret': recaptcha_secret_key, 'response': token}
     )
-    
+
     result = response.json()
     return jsonify({"success": result.get('success')})
+
 
 if __name__ == "__main__":
     app.run(debug=True)
